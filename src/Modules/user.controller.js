@@ -301,9 +301,9 @@ const userController = () => {
       }
     };
     const approveDocument = async (req, res) => {
-      const {userId} = req.query;
+      const {userId , status} = req.query;
       try {
-        const updateDocument = await MasterUser.update({isVerifiedUser : true} , {where : {id : userId}});
+        const updateDocument = await MasterUser.update({isVerifiedUser : status} , {where : {id : userId}});
         return res.status(200).json({status : true, message : "User verified successfully"});
       } catch (error) {
         return res.status(500).json({ status: false, message: error.message || "Can not view the document now, please try again later" });

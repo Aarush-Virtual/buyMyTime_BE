@@ -44,7 +44,7 @@ const MasterUser = sequelize.define('MasterUsers', {
   },
   preferredServiceCategoryIds: {
     type: DataTypes.JSON,
-    allowNull: true, // Allow an empty array for no preferences
+    allowNull: true,
   },
   resetPasswordToken: {
     type: DataTypes.STRING,
