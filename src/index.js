@@ -14,6 +14,7 @@ app.use(cors());
 app.use(bodyParser.urlencoded({extended: false}));
 app.use(bodyParser.json());
 console.log("secret " , process.env.JWT_SECRET , process.env.PORT);
+
 // connect server
 app.get("/", (req, res) => res.send("server connected! "));
 
@@ -29,7 +30,6 @@ connectDB()
 })
 // init routing 
 app.use("/v1", initUserRoutes());
-
 app.listen(port, ()=>{
     console.log(`app is listening on port ${port}`);
 });

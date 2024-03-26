@@ -3,7 +3,7 @@ var jwt = require('jsonwebtoken');
 const dotenv = require("dotenv");
 const multer = require('multer');
 dotenv.config();
-
+const { Op } = require('sequelize');
 // Function to hash a password with salting
 async function hashPassword(password) {
   const salt = await bcrypt.genSalt(10); // Adjust salt rounds based on security needs
@@ -40,10 +40,10 @@ const generateJwtSecret = async () => {
   }
 }
 
-const generateAuthToken = (userId) => {
-  const payload = { userId }; // Payload for the token
+const generateAuthToken = (payload) => {
+  // const payload = { userId }; // Payload for the token
   
-  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' }); // Token expires in 1 hour
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' }); // Token expires in 24 hour
 };
 
 
@@ -51,4 +51,26 @@ const upload = multer({
   dest: 'passport/', // Replace with your desired local folder for uploads
 });
 
-module.exports = {registerUserHashing , comparePassword, hashPassword , generateJwtSecret, generateAuthToken , upload}
+async function searchData(model, searchParams) {
+  try {
+    let whereConditions = {};
+
+    // Construct dynamic where conditions based on search parameters
+    for (const column in searchParams) {
+      if (searchParams.hasOwnProperty(column)) {
+        whereConditions[column] = {
+          [Op.like]: `%${searchParams[column]}%`, // Case-insensitive search
+        };
+      }
+    }
+
+    // Perform the search using Sequelize
+    const results = await model.findAll({ where: whereConditions });
+
+    return results;
+  } catch (error) {
+    console.error('Error during search:', error);
+    throw error; // Re-throw to handle errors in calling function
+  }
+}
+module.exports = {registerUserHashing , comparePassword, hashPassword , generateJwtSecret, generateAuthToken , upload , searchData}

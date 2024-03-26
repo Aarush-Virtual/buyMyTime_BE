@@ -6,13 +6,15 @@ const { generateJwtSecret } = require('./user.helper');
 const jwtSecret = process.env.JWT_SECRET; // Replace with a strong secret key
 const emailSender = process.env.EMAIL; // Replace with your email address
 const emailPassword = process.env.PASSWORD; // Replace with your email password
-
-const generateResetPasswordToken = (userId) => {
-  const payload = { userId };
-  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' }); // Token expires in 1 hour
-};
+const { v4: uuidv4 } = require('uuid');
+const APP_URL = process.env.FRONTEND_URL;
+const generateResetPasswordToken = async () => {
+  const uniqueValue = uuidv4();
+  return uniqueValue;
+}
 
 const sendResetPasswordEmail = async (email, token) => {
+  
     const transporter = nodemailer.createTransport({
         service: 'gmail',
         host: 'smtp.gmail.com', // Replace with your email provider's SMTP server
@@ -31,17 +33,17 @@ const sendResetPasswordEmail = async (email, token) => {
     html: `
       <p>You requested a password reset for your account.</p>
       <p>Click this link to reset your password within 1 hour:</p>
-      <a href=http://your-app-url/reset-password/${token}">Reset Password</a>
+      <a href=http://localhost:3000/reset-password/${token}">Reset Password</a>
       <p>If you did not request a password reset, please ignore this email.</p>
     `,
   };
 
   try {
     console.log("mail options " , mailOptions , emailSender, emailPassword);
-    await transporter.sendMail(mailOptions);
+    const responseFromMail = await transporter.sendMail(mailOptions);
     return {
         status : true, 
-
+        data : responseFromMail
     }
   } catch (error) {
     console.error('Error sending password reset email:', error);

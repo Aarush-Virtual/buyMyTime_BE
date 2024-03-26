@@ -12,7 +12,12 @@ const errorFunction = (errorBit, msg) => {
         message : message
     })
   } 
+  const USER_TYPES = {
+    CUSTOMER : "customer",
+    SERVICEPROVIDER : "serviceProvider",
+    ADMIN : "admin"
+  }
 
   module.exports = {
-    errorFunction , SendResponse
+    errorFunction , SendResponse , USER_TYPES
   }

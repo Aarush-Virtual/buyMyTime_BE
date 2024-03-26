@@ -1,9 +1,12 @@
-const { SendResponse } = require("../Constants/common.constants");
 const { generateResetPasswordToken, sendResetPasswordEmail } = require("../Helpers/passwordreset.service");
-const { registerUserHashing, comparePassword, generateAuthToken } = require("../Helpers/user.helper");
+const { registerUserHashing, comparePassword, generateAuthToken, generateJwtSecret } = require("../Helpers/user.helper");
 const MasterUser = require("../Models/MasterUsers");
 const ServiceCategoryType = require("../Models/ServiceCategory.model");
-
+const moment = require("moment");
+const fs = require("fs");
+const mime = require('mime-types');
+const path = require("path");
+const { Op } = require('sequelize');
 const userController = () => {
     const registerUser = async (req, res) => {
         const request = req.body;
@@ -40,7 +43,10 @@ const userController = () => {
               ...hashedUserObject,
               preferredServiceCategoryIds: preferredCategories,
             });
-            return res.status(200).json({status : true , message : "User Registered Successfully"});
+            console.log("registered user response in the end " , user);
+            const token = generateAuthToken({userId : user.dataValues.id, userType : user.dataValues.userType , isVerifiedUser : user.dataValues.isVerifiedUser}); // Generate authentication token
+
+            return res.status(200).json({status : true , message : "User Registered Successfully" , token : token});
         } catch (error) {
             console.error("error in registration " , error);
             return res.status(500).json({status : false , message : "User registration failed"});
@@ -60,7 +66,7 @@ const userController = () => {
             return res.status(401).json({ message: 'Please enter correct password' });
           }
 
-          const token = generateAuthToken(user.dataValues.id); // Generate authentication token
+          const token = generateAuthToken({userId : user.dataValues.id, userType : user.dataValues.userType , isVerifiedUser : user.dataValues.isVerifiedUser}); // Generate authentication token
           console.log("token value " , token);
           res.status(200).json({
             success: true,
@@ -73,7 +79,7 @@ const userController = () => {
         return res.status(500).json({status : false , message : "User Login failed"}); 
       }
     }
-    const resetPassword = async (req, res) => {
+    const sendResetPasswordLink = async (req, res) => {
       const {email} = req.body;
       try {
         console.log("Email in the reset password " , email);
@@ -82,13 +88,15 @@ const userController = () => {
         if (!user) {
           return res.status(400).json({ message: 'Email address not found' });
         }
-        const resetToken = generateResetPasswordToken(user.id);
-        
-        console.log("token from generate reset password " , resetToken);
+          const resetPasswordToken = await generateResetPasswordToken();
 
-        const sendEmail = await sendResetPasswordEmail(email, resetToken)
-        console.log(sendEmail);
+        const sendEmail = await sendResetPasswordEmail(email, resetPasswordToken);
         if(sendEmail.status) {
+          console.log("email sending data ", sendEmail?.data)
+        // set the values to the table 
+        user.resetPasswordToken = resetPasswordToken;
+        user.resetPasswordExpires = Date.now() + 3600000; // 1 hour from now
+        await user.save();
           return res.status(200).json({
             status : true, 
             message : "Please check your email to reset the password"
@@ -106,15 +114,29 @@ const userController = () => {
       }
     }
     const forgotPassword = async (req, res) => {
+      const { email } = req.body;
       try {
-          
+        const user = await MasterUser.findOne({ where : { email }});
+        console.log("user query returning " , user);
+        if (!user) {
+          return res.status(400).json({ message: 'Email address not found' });
+        }
+        // generate the jwt key and d time and store that in the db and send the unique 
+        const getUniqueValue = await generateResetPasswordToken();
+        console.log("getUniqueValue ----> " , getUniqueValue);
+
+
+        user.resetPasswordToken = getUniqueValue;
+        user.resetPasswordExpires = Date.now() + 3600000; // 1 hour from now
+        await user.save();
+
       } catch (error) {
-        
+        return res.status(500).json({status : false, message : error.message || "Forgot password failed, please try again later"});
       }
     }
     const submitPassport = async (req, res) => {
       const {userId} = req.user;
-      const {passportNumber} = req.body;
+      const {passportNumber , verificationDocumentType} = req.body;
       try {
           console.log("file -------> " , req.file);
           // {
@@ -132,19 +154,172 @@ const userController = () => {
           // { passportNumber: 'aarush123456' }
 
           // upload the file path and the passport number to the 
-          const updateUser = await MasterUser.update({passportNumber : passportNumber , passportURL : req.file.path} , {where : {id : userId}});
+          const updateUser = await MasterUser.update({passportNumber : passportNumber , passportURL : req.file.path, verificationDocumentType : verificationDocumentType} , {where : {id : userId}});
           console.log("update user ------> " , updateUser);
           return res.status(200).json({status : true, message : "File uploaded successfully, please wait until verified"});
       } catch (error) {
         return res.status(500).json({status : false , message : error.message || "Upload failed, please try again later"});
       }
     }
+    const resetPassword = async (req, res) => {
+      const {password , resetPasswordToken} = req.body;
+      try {
+        const userToResetPassword = await MasterUser.findOne({ where : {resetPasswordToken : resetPasswordToken}});
+        if(userToResetPassword?.resetPasswordToken != resetPasswordToken ){
+          return res.status(401).json({ message: 'Password reset request not found' });
+        }
+        console.log({
+          currenttime: new Date(),
+          expiryTime : userToResetPassword?.resetPasswordExpires
+        })
+        if(userToResetPassword?.resetPasswordExpires < new Date())  {
+          return res.status(401).json({ message: 'Password reset link expired, please create a new link' });
+        }
+        const {password : newPassword} = await registerUserHashing({password : password});
+        userToResetPassword.password = newPassword;
+        userToResetPassword.resetPasswordToken = null;
+        userToResetPassword.resetPasswordExpires = null;
+
+        await userToResetPassword.save();
+
+        return res.status(200).json({status : true, message : "Password updated successfully, please login to continue"});
+        
+      } catch (error) {
+        return res.status(500).json({status : false, message : error.message || "Reset Password Failed, Please try again later"})
+      }
+    }
+    const listCustomer = async (req, res) => {
+      const { isVerifiedUser, page = 1, limit = 3, userType, searchParams, documentStatus } = req.query;
+      try {
+        const offset = (page - 1) * limit;
+        let whereConditions = {
+          isVerifiedUser,
+          userType,
+        };
+    
+        if (documentStatus) {
+          // Add document status condition
+          whereConditions[Op.or] = [
+            { passportNumber: { [Op.ne]: null } },
+            { passportURL: { [Op.ne]: null } },
+            { verificationDocumentType: { [Op.ne]: null } },
+          ];
+        }
+    
+        if (searchParams) {
+          // Add search conditions
+          const searchableColumns = ['fullName', 'email', 'userName'];
+          const searchTerm = `%${searchParams}%`;
+          whereConditions[Op.and] = [
+            { [Op.or]: searchableColumns.map(column => ({ [column]: { [Op.like]: searchTerm } })) },
+          ];
+        }
+    
+        const allUsersAndServiceProvider = await MasterUser.findAll({
+          where: whereConditions,
+          attributes: {
+            exclude: ["password", "resetPasswordToken", "resetPasswordExpires"]
+          },
+          offset,
+          limit,
+        });
+    
+        const totalUsers = await MasterUser.count({
+          where: whereConditions
+        });
+    
+        const totalPages = Math.ceil(totalUsers / limit);
+    
+        return res.status(200).json({ status: true, message: "User found successfully", data: allUsersAndServiceProvider, count: totalUsers, page: totalPages });
+    
+      } catch (error) {
+        console.log(error);
+        return res.status(500).json({ status: false, message: "List customer failed" });
+      }
+    }
+    
+    const getVerificationStatus = async (req, res) => {
+      const {userId} = req.user;
+      try {
+        console.log("user id -------->", userId )
+        const getVerStatus = await MasterUser.findByPk(userId , {
+          attributes : ["isVerifiedUser" , "passportNumber" , "passportURL", "verificationDocumentType"]
+        });
+
+        return res.status(200).json({status : true, message: "User found successfully" , data : getVerStatus})
+
+      } catch (error) {
+        return res.status(500).json({status : false , message : error.message || "Verification status failed, please try again"});
+      }
+    }
+    const reviewDocument = async (req, res) => {
+      const { userId } = req.query;
+    
+      try {
+        const getDocument = await MasterUser.findByPk(userId, {
+          attributes: ["passportNumber", "passportURL", "verificationDocumentType"]
+        });
+        if(!getDocument?.dataValues)    {
+          return res.status(404).json({ status: false, message: "User not found!" });
+        }
+        if (!getDocument || !getDocument.dataValues.passportNumber || !getDocument.dataValues.passportURL || !getDocument.dataValues.verificationDocumentType) {
+          return res.status(404).json({ status: false, message: "Documents not found!" });
+        }
+    
+        const filePath = getDocument.dataValues.passportURL;
+    
+        if (!fs.existsSync(filePath)) {
+          return res.status(404).json({ status: false, message: 'File not found' });
+        }
+        function getContentType(filePath) {
+          const extension = path.extname(filePath).toLowerCase();
+          switch (extension) {
+            case '.pdf':
+              return 'application/pdf';
+            case '.doc':
+              return 'application/msword';
+            case '.docx':
+              return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+            // Add more mime types as needed
+            default:
+              return 'application/octet-stream'; // Default to binary data if type is unknown
+          }
+        }
+        // Set headers for file download
+        const contentType = getContentType(filePath);
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename=${path.basename(filePath)}`);
+    
+        // Create read stream from file and pipe it to response
+        const stream = fs.createReadStream(filePath);
+        stream.pipe(res);
+    
+        console.log("Document found:", getDocument);
+    
+      } catch (error) {
+        return res.status(500).json({ status: false, message: error.message || "Can not view the document now, please try again later" });
+      }
+    };
+    const approveDocument = async (req, res) => {
+      const {userId} = req.query;
+      try {
+        const updateDocument = await MasterUser.update({isVerifiedUser : true} , {where : {id : userId}});
+        return res.status(200).json({status : true, message : "User verified successfully"});
+      } catch (error) {
+        return res.status(500).json({ status: false, message: error.message || "Can not view the document now, please try again later" });
+      }
+    }
     return {
         registerUser,
         loginUser,
-        resetPassword,
+        sendResetPasswordLink,
         forgotPassword,
-        submitPassport
+        submitPassport,
+        resetPassword,
+        listCustomer,
+        getVerificationStatus,
+        reviewDocument,
+        approveDocument
     }
 }
 

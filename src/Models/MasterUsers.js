@@ -64,8 +64,12 @@ const MasterUser = sequelize.define('MasterUsers', {
     allowNull : true,
     unique : true
   },
+  verificationDocumentType : {
+    type: DataTypes.ENUM('passport', 'driversLicence'),
+    allowNull: true 
+  }
 },{
-  timestamps: false // Disable timestamps
+  timestamps: true // Disable timestamps
 });
 
 // Export the MasterUser model and syncModel function
