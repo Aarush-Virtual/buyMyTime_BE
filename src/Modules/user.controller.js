@@ -69,7 +69,7 @@ const userController = () => {
           if(!user?.dataValues?.isVerifiedUser && (user?.dataValues?.passportNumber !== null || user?.dataValues?.passportNumber !== "")) {
             verificationPending = true;
           }
-          const token = generateAuthToken({userId : user.dataValues.id, userType : user.dataValues.userType , isVerifiedUser : user.dataValues.isVerifiedUser, verificationPending : verificationPending}); // Generate authentication token
+          const token = generateAuthToken({userId : user.dataValues.id, userType : user.dataValues.userType , isVerifiedUser : user.dataValues.isVerifiedUser, verificationPending : verificationPending, name : user.dataValues.fullName}); // Generate authentication token
           console.log("token value " , token);
           res.status(200).json({
             success: true,
