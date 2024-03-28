@@ -65,8 +65,11 @@ const userController = () => {
           if (!isPasswordValid) {
             return res.status(401).json({ message: 'Please enter correct password' });
           }
-
-          const token = generateAuthToken({userId : user.dataValues.id, userType : user.dataValues.userType , isVerifiedUser : user.dataValues.isVerifiedUser}); // Generate authentication token
+          let verificationPending = false;
+          if(!user?.dataValues?.isVerifiedUser && (user?.dataValues?.passportNumber !== null || user?.dataValues?.passportNumber !== "")) {
+            verificationPending = true;
+          }
+          const token = generateAuthToken({userId : user.dataValues.id, userType : user.dataValues.userType , isVerifiedUser : user.dataValues.isVerifiedUser, verificationPending : verificationPending}); // Generate authentication token
           console.log("token value " , token);
           res.status(200).json({
             success: true,
@@ -309,6 +312,24 @@ const userController = () => {
         return res.status(500).json({ status: false, message: error.message || "Can not view the document now, please try again later" });
       }
     }
+    
+    const downloadFile = async (req , res) => {
+      const {filename} = req.query;
+      try {
+        const filepath = path.join(__dirname, '../../passport', filename);
+        console.log("file path --------->" , filepath);
+
+        res.download(filepath, (err) => {
+          if(err) {
+              // Handle error, if any
+              console.error("File download failed:", err);
+              res.status(500).json({ success: false, message: "File download failed" });
+          }
+        })
+      } catch (error) {
+        return res.status(500).json({ status: false, message: error.message || "Internal server error, could not download file" });
+      }
+    }
     return {
         registerUser,
         loginUser,
@@ -319,7 +340,8 @@ const userController = () => {
         listCustomer,
         getVerificationStatus,
         reviewDocument,
-        approveDocument
+        approveDocument,
+        downloadFile
     }
 }
 

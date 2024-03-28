@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 var jwt = require('jsonwebtoken');
 const dotenv = require("dotenv");
 const multer = require('multer');
+const path = require("path");
 dotenv.config();
 const { Op } = require('sequelize');
 // Function to hash a password with salting
@@ -46,10 +47,22 @@ const generateAuthToken = (payload) => {
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' }); // Token expires in 24 hour
 };
 
-
-const upload = multer({
-  dest: 'passport/', // Replace with your desired local folder for uploads
+const storage = multer.diskStorage({
+  destination: 'passport/', // Replace with your desired local folder for uploads
+  filename: (req, file, cb) => {
+    // Extracting the file extension
+    const ext = path.extname(file.originalname);
+    // Generating a unique filename with the original extension
+    const uniqueFilename = `${Date.now()}${ext}`;
+    cb(null, uniqueFilename);
+  }
 });
+
+// const upload = multer({
+//   dest: 'passport/', // Replace with your desired local folder for uploads
+// });
+const upload = multer({ storage: storage });
+
 
 async function searchData(model, searchParams) {
   try {

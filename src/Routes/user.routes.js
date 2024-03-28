@@ -6,7 +6,7 @@ const { userSchema, loginSchema, resetPasswordValidation, reviewDocumentValidato
 const { upload } = require("../Helpers/user.helper");
 const { USER_TYPES } = require("../Constants/common.constants");
 const initUserRoutes = () => {
-    const {registerUser , loginUser, resetPassword, sendResetPasswordLink,submitPassport , listCustomer, getVerificationStatus, reviewDocument , approveDocument} = userController();
+    const {registerUser , loginUser, resetPassword, sendResetPasswordLink,submitPassport , listCustomer, getVerificationStatus, reviewDocument , approveDocument, downloadFile} = userController();
     router.route("/user/register").post(customValidation(userSchema, "body") , registerUser);
     router.route("/user/login").post(customValidation(loginSchema, "body"), loginUser);
     router.route("/user/password/send").post(sendResetPasswordLink);
@@ -29,7 +29,8 @@ const initUserRoutes = () => {
     // admin routes for user 
     router.route("/user/customer/list").get(verifyToken(USER_TYPES.ADMIN), listCustomer);
     router.route("/user/review/document").get(verifyToken(USER_TYPES.ADMIN) ,customValidation(reviewDocumentValidator , "query"),  reviewDocument);
-    router.route("/user/review/document/approve").put(verifyToken(USER_TYPES.ADMIN), approveDocument)
+    router.route("/user/review/document/approve").put(verifyToken(USER_TYPES.ADMIN), approveDocument);
+    router.route("/user/file/download").get(downloadFile)
     return router;
 }
 module.exports = initUserRoutes;

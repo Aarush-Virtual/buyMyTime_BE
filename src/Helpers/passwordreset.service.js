@@ -33,7 +33,7 @@ const sendResetPasswordEmail = async (email, token) => {
     html: `
       <p>You requested a password reset for your account.</p>
       <p>Click this link to reset your password within 1 hour:</p>
-      <a href=http://localhost:3000/reset-password/${token}">Reset Password</a>
+      <a href=http://localhost:3000/reset-password/${token}>Reset Password</a>
       <p>If you did not request a password reset, please ignore this email.</p>
     `,
   };
